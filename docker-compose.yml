@@ -1,7 +1,7 @@
 services:
-  emby-seerr-mitm:
+  emby-seerr-strm-proxy:
     image: mitmproxy/mitmproxy:latest
-    container_name: emby-seerr-mitm
+    container_name: emby-seerr-strm-proxy
     network_mode: host # Enable DLNA and Wake-on-Lan
     restart: unless-stopped
     #ports:
