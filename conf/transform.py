@@ -11,7 +11,7 @@ def is_debug():
 def is_info():
     return LOG_LEVEL in ["info", "debug"]
 
-# The fake 1080p stream we inject to satisfy Jellyseerr's resolution check
+# The fake 1080p stream we inject to satisfy Seerr's resolution check
 FAKE_MEDIA_STREAM = {
     "Type": "Video",
     "Codec": "h264",
@@ -27,8 +27,7 @@ def is_seerr_client(flow: http.HTTPFlow) -> bool:
     auth_header = flow.request.headers.get("Authorization", "")
     x_auth_header = flow.request.headers.get("X-Emby-Authorization", "")
     combined = (auth_header + " " + x_auth_header).lower()
-    return 'client="seerr"' in combined or 'client="overseerr"' in combined
-
+    return 'client="seerr"' in combined
 def has_valid_video_stream(item: dict) -> bool:
     """Check if the item already has a valid probed video stream."""
     media_sources = item.get("MediaSources", [])
