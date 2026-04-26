@@ -1,6 +1,15 @@
 import json
-import logging
+import os
 from mitmproxy import http
+
+# Check environment variable for log control (debug, info, none)
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "info").lower()
+
+def is_debug():
+    return LOG_LEVEL == "debug"
+
+def is_info():
+    return LOG_LEVEL in ["info", "debug"]
 
 # The fake 1080p stream we inject to satisfy Jellyseerr's resolution check
 FAKE_MEDIA_STREAM = {
@@ -53,8 +62,22 @@ def process_item(item: dict) -> int:
     if not isinstance(item, dict):
         return 0
         
-    path = item.get("Path", "")
-    if not path.lower().endswith(".strm"):
+    # Check if this item is a .strm file.
+    # Emby might put the Path at the root, or inside the MediaSources array
+    # depending on what 'fields' were requested by Seerr.
+    is_strm = False
+    
+    # Sometimes Emby translates the Stream URL directly into the Path (e.g. .mkv over HTTP),
+    # but correctly leaves the Container labeled as "strm". We check both!
+    if item.get("Container", "").lower() == "strm" or item.get("Path", "").lower().endswith(".strm"):
+        is_strm = True
+    else:
+        for source in item.get("MediaSources", []):
+            if source.get("Container", "").lower() == "strm" or source.get("Path", "").lower().endswith(".strm"):
+                is_strm = True
+                break
+                
+    if not is_strm:
         return 0
         
     if has_valid_video_stream(item):
@@ -62,6 +85,21 @@ def process_item(item: dict) -> int:
         
     inject_fake_media_info(item)
     return 1
+
+def request(flow: http.HTTPFlow):
+    """Hook for incoming requests (before they go to Emby)"""
+    if not is_debug():
+        return
+        
+    path = flow.request.path.lower()
+    if "/items" not in path and "/episodes" not in path:
+        return
+        
+    auth = flow.request.headers.get("Authorization", "<none>")
+    xauth = flow.request.headers.get("X-Emby-Authorization", "<none>")
+    
+    print(f"[DEBUG-REQ] -> {flow.request.method} {flow.request.url}", flush=True)
+    print(f"[DEBUG-REQ] Auth Headers -> Auth: {auth} | X-Auth: {xauth}", flush=True)
 
 def response(flow: http.HTTPFlow):
     """The main mitmproxy hook. Called for every HTTP response."""
@@ -73,7 +111,12 @@ def response(flow: http.HTTPFlow):
 
     # 2. Filter by Client (ignore normal Emby players)
     if not is_seerr_client(flow):
+        if is_debug():
+             print(f"[DEBUG-SKIP] Request was not from a Seerr Client. Skipping manipulation.", flush=True)
         return
+
+    if is_info():
+        print(f"[Seerr-Strm-Proxy] Intercepted Seerr Request: {path}", flush=True)
 
     # 3. Ensure the response is JSON
     content_type = flow.response.headers.get("Content-Type", "")
@@ -84,6 +127,10 @@ def response(flow: http.HTTPFlow):
     try:
         # Load the raw JSON string from the response payload
         data = json.loads(flow.response.content)
+        
+        if is_debug():
+            print(f"[DEBUG-RES-BODY] Raw JSON from Emby:\n{json.dumps(data, indent=2)}", flush=True)
+
         injected_count = 0
         
         # Determine if it's a list response (QueryResult) or single item (BaseItemDto)
@@ -95,8 +142,13 @@ def response(flow: http.HTTPFlow):
             
         # Re-commit the changes back to the HTTP Response body if we changed anything
         if injected_count > 0:
-            logging.info(f"[Seerr-Strm-Proxy] Injected fake 1080p metadata into {injected_count} STRM item(s) on {path}")
+            if is_info():
+                print(f"[Seerr-Strm-Proxy] SUCCESS: Injected fake 1080p metadata into {injected_count} STRM item(s)!", flush=True)
             flow.response.text = json.dumps(data)
+        else:
+            if is_info():
+                print(f"[Seerr-Strm-Proxy] No .strm items required injection in this payload.", flush=True)
             
     except Exception as e:
-        logging.error(f"[Seerr-Strm-Proxy] Failed to process JSON payload: {e}")
+        if is_info():
+            print(f"[Seerr-Strm-Proxy] Failed to process JSON payload: {e}", flush=True)
