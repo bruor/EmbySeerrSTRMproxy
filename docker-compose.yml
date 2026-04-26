@@ -7,6 +7,12 @@ services:
     #ports:
       # Expose the proxy on port 8097 (change the left side to whatever you want)
       #- "8097:8097"
+    environment:
+      # Options: debug, info, none
+      # debug: Shows full incoming URLs (untruncated), Auth headers, and injection statuses
+      # info: Shows only when a fake .strm stream is successfully injected
+      # none: Completely silent
+      - LOG_LEVEL=info
     volumes:
       # Mount the intercept script into the container
       - ./conf/transform.py:/transform.py:ro
