@@ -1,0 +1,14 @@
+services:
+  emby-seerr-mitm:
+    image: mitmproxy/mitmproxy:latest
+    container_name: emby-seerr-mitm
+    network_mode: host # Enable DLNA and Wake-on-Lan
+    restart: unless-stopped
+    #ports:
+      # Expose the proxy on port 8097 (change the left side to whatever you want)
+      #- "8097:8097"
+    volumes:
+      # Mount the intercept script into the container
+      - ./conf/transform.py:/transform.py:ro
+    # Replace http://emby.host.name:8096 with your actual Emby server's hostname or IP, and port
+    command: mitmdump -s /transform.py --mode reverse:http://emby.host.name:8096 -p 8097
