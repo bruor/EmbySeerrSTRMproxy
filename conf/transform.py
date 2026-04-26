@@ -23,7 +23,7 @@ FAKE_MEDIA_STREAM = {
 }
 
 def is_seerr_client(flow: http.HTTPFlow) -> bool:
-    """Check if the request comes from Jellyseerr/Overseerr."""
+    """Check if the request comes from Seerr."""
     auth_header = flow.request.headers.get("Authorization", "")
     x_auth_header = flow.request.headers.get("X-Emby-Authorization", "")
     combined = (auth_header + " " + x_auth_header).lower()
